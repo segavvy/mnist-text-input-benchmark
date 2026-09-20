@@ -1,9 +1,9 @@
 const {summaries,rows}=window.MNIST;
 const $=id=>document.getElementById(id);
-const names={binary:'Jev / 二値化ASCII',grayscale:'Jev / 数値行列',ascii10:'Jev / 濃淡10段階',fixedwidth:'Jev / 数値・3桁幅',gpt5nano:'nano minimal（二値化）',gpt5nano_low:'nano low（二値化）',coordinates:'Jev 座標配列',gpt5nano_coordinates:'nano minimal（座標）',luna_none:'luna none（二値化）'};
+const names={binary:'Jev / 二値化ASCII',grayscale:'Jev / 数値行列',ascii10:'Jev / 濃淡10段階',fixedwidth:'Jev / 数値・3桁幅',gpt5nano:'nano minimal（二値化）',gpt5nano_low:'nano low（二値化）',coordinates:'Jev 座標配列',gpt5nano_coordinates:'nano minimal（座標）',luna_none:'Luna none（二値化）',luna_image:'Luna none（画像）'};
 const outcomes={improved:'比較先で正解に',regressed:'比較先で不正解に',both_correct:'両方正解',both_wrong:'両方不正解'};
 const modes=Object.keys(summaries);
-const comparisonState={a:'binary',b:modes.includes('luna_none')?'luna_none':'coordinates'};
+const comparisonState={a:modes.includes('luna_image')?'luna_none':'binary',b:modes.includes('luna_image')?'luna_image':modes.includes('luna_none')?'luna_none':'coordinates'};
 const pair=()=>[comparisonState.a,comparisonState.b];
 function outcome(r){const [a,b]=pair(),ac=r[a].prediction===r.label,bc=r[b].prediction===r.label;return ac&&bc?'both_correct':bc?'improved':ac?'regressed':'both_wrong'}
 let selected=rows[0].index;
@@ -17,8 +17,8 @@ const overviewNames={binary:'二値化ASCII',grayscale:'数値行列',ascii10:'�
 function overviewTable(id,group,labels){
  $(id).innerHTML='<thead><tr><th>指標</th>'+group.map(m=>`<th scope="col">${labels[m]}</th>`).join('')+'</tr></thead><tbody>'+metrics.map(([name,f])=>`<tr><th scope="row">${name}</th>${group.map(m=>`<td>${f(summaries[m])}</td>`).join('')}</tr>`).join('')+'</tbody>';
 }
-const chartColors={binary:'#277fce',grayscale:'#8256c4',ascii10:'#18836b',fixedwidth:'#b06b22',coordinates:'#52657e',gpt5nano:'#8256c4',gpt5nano_low:'#18836b',luna_none:'#b06b22'};
-const chartModes=['binary','grayscale','ascii10','fixedwidth','coordinates','gpt5nano','gpt5nano_low','luna_none'].filter(m=>modes.includes(m));
+const chartColors={binary:'#277fce',grayscale:'#8256c4',ascii10:'#18836b',fixedwidth:'#b06b22',coordinates:'#52657e',gpt5nano:'#8256c4',gpt5nano_low:'#18836b',luna_none:'#b06b22',luna_image:'#277fce'};
+const chartModes=['binary','grayscale','ascii10','fixedwidth','coordinates','gpt5nano','gpt5nano_low','luna_none','luna_image'].filter(m=>modes.includes(m));
 function niceMax(value){if(value<=0)return 1;const power=10**Math.floor(Math.log10(value));return Math.ceil(value/power)*power;}
 const chartSpecs=[
  {title:'精度（正解率）',hint:'高いほど良い',value:s=>s.accuracy,max:1,format:v=>(v*100).toFixed(0)+'%',tick:v=>(v*100).toFixed(0)+'%'},
@@ -33,6 +33,8 @@ function overviewGroup(id,group,labels){
 }
 overviewGroup('encoding',['binary','grayscale','ascii10','fixedwidth','coordinates'],overviewNames);
 overviewGroup('model',['binary','gpt5nano','gpt5nano_low','luna_none'],{binary:'Jev',gpt5nano:'nano / minimal',gpt5nano_low:'nano / low',luna_none:'Luna / none'});
+if(summaries.luna_image)$('vision-result').textContent=`Lunaの画像入力は100枚中${summaries.luna_image.correct}枚正解（${(summaries.luna_image.accuracy*100).toFixed(0)}%）。Lunaの二値化ASCIIの24%から${((summaries.luna_image.accuracy-summaries.luna_none.accuracy)*100).toFixed(0)}ポイント上昇。`;
+overviewGroup('vision',['binary','luna_none','luna_image'],{binary:'Jev / 二値化ASCII',luna_none:'Luna / 二値化ASCII',luna_image:'Luna / 元画像PNG'});
 overviewTable('extra-comparison',['gpt5nano','gpt5nano_coordinates'].filter(m=>modes.includes(m)),names);
 
 function updatePair(){document.querySelectorAll('[data-compare-side]').forEach(select=>{select.value=comparisonState[select.dataset.compareSide]});const [a,b]=pair(),counts={both_correct:0,improved:0,regressed:0,both_wrong:0};rows.forEach(r=>counts[outcome(r)]++);$('paired').textContent=`${names[a]} → ${names[b]}： `+Object.entries(counts).map(([k,n])=>`${outcomes[k]} ${n}件`).join(' / ');$('legend').textContent=`青：${names[a]} / 紫：${names[b]}`;$('matrix-name-a').textContent=names[a];$('matrix-name-b').textContent=names[b];$('matrix').setAttribute('aria-label',names[a]+'の混同行列');$('matrix-gray').setAttribute('aria-label',names[b]+'の混同行列');matrix('matrix',summaries[a]);matrix('matrix-gray',summaries[b]);
@@ -47,6 +49,7 @@ $('results-head').innerHTML=`<tr><th>サンプル</th><th>元画像</th><th>正�
 function matrix(id,s){$(id).innerHTML='<thead><tr><th scope="col">正解 / 予測</th>'+Array.from({length:10},(_,i)=>`<th scope="col">${i}</th>`).join('')+'</tr></thead><tbody>'+s.confusion_matrix_true_rows_predicted_columns.map((row,i)=>`<tr><th scope="row">${i}</th>`+row.map((n,j)=>`<td style="background:${n?(i===j?`rgba(58,174,142,${.12+n*.045})`:`rgba(215,103,88,${.1+n*.04})`):'#f8fafc'}">${n}</td>`).join('')+'</tr>').join('')+'</tbody>'}
 
 const formats={
+ image:{title:'画像入力（PNG）',description:'元の28×28・8-bitグレースケールをPNGで保持し、画像入力として送信。拡大・二値化なし、detail=original。Base64は画像の転送用で、文字列として読ませる実験ではありません。'},
  binary:{title:'二値化ASCII',description:'画素値128以上を #、それ以外を . に置き換えた28行の格子。白黒の形を残し、濃淡は省きます。'},
  grayscale:{title:'数値行列',description:'元の画素値0〜255をカンマ区切りの28行で表現。0は黒、255は白。元画像の濃淡をすべて保持します。'},
  ascii10:{title:'濃淡10段階',description:'暗い順に「空白 . : - = + * # % @」の10文字で表現。濃淡を10段階にまとめ、文字の並びで形を伝えます。'},
@@ -54,7 +57,7 @@ const formats={
  coordinates:{title:'座標配列',description:'画素値128以上の位置だけを[x,y]で列挙。左上が[0,0]、右向きにx、下向きにyが増えます。記載のない画素は0。二値化ASCIIと同じ画素情報です。'}
 };
 let activeFormat='coordinates';
-function formatOf(mode){return mode.includes('coordinates')?'coordinates':summaries[mode].model.startsWith('gpt-')?'binary':mode}
+function formatOf(mode){return mode==='luna_image'?'image':mode.includes('coordinates')?'coordinates':summaries[mode].model.startsWith('gpt-')?'binary':mode}
 function setFormat(format){
  activeFormat=format;const previous=$('request-mode').value;
  $('request-mode').replaceChildren();
@@ -68,7 +71,7 @@ function inputDetails(r){
  const mode=$('request-mode').value,req=r[mode].request,state=req.state||req.input;
  $('lab-sample').textContent=`test #${r.index} · 正解 ${r.label}`;
  $('format-description').textContent=formats[activeFormat].description;
- $('input-grid').textContent=state.slice(state.indexOf('\n')+1).split('\n\n')[0];
+ $('input-grid').textContent=activeFormat==='image' ? state[0].content[0].text+'\n\n[画像入力：28×28 PNG / detail=original]\n実際の画像データは下のリクエスト全文で確認できます。' : state.slice(state.indexOf('\n')+1).split('\n\n')[0];
  $('input-grid').classList.toggle('coordinates',activeFormat==='coordinates');
  $('request').textContent=JSON.stringify(req,null,2);
  $('input-note').textContent='この表現で評価済みの設定のみ選べます。切り替えによるAPI呼び出し・追加費用はありません。';
